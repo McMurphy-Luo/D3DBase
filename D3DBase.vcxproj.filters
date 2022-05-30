@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="MainWindow.cpp" />
+    <ClCompile Include="WinMain.cpp" />
+    <ClCompile Include="D3DBase.cpp" />
+    <ClCompile Include="Utf8String.cpp" />
+    <ClCompile Include="Utils.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="MainWindow.h" />
+    <ClInclude Include="D3DBase.h" />
+    <ClInclude Include="Utf8String.h" />
+    <ClInclude Include="Utils.h" />
+    <ClInclude Include="Define.h" />
+  </ItemGroup>
+</Project>
