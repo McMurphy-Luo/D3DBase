@@ -3,10 +3,12 @@
 #include "Windows.h"
 #include "MainWindow.h"
 #include "Utils.h"
+#include "D3DBase.h"
 
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
-  MainWindow* window = new MainWindow(u8"Main", hInstance);
+  std::shared_ptr<MainWindow> window(new MainWindow(u8"Main", hInstance));
+  D3DBase* test = new D3DBase(window);
   window->Show(SW_SHOWNORMAL);
   MSG message;
   BOOL ret;
@@ -19,7 +21,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     TranslateMessage(&message);
     DispatchMessage(&message);
   }
-  delete window;
+  delete test;
+  window.reset();
 #ifdef _CRTDBG_MAP_ALLOC
   _CrtDumpMemoryLeaks();
 #endif
