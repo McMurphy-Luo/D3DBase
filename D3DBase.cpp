@@ -4,8 +4,8 @@
 #include "Utils.h"
 #include "MainWindow.h"
 
-D3DBase::D3DBase(std::shared_ptr<MainWindow> main_window)
-  : window_(main_window) {
+D3DBase::D3DBase(MainWindow* main_window)
+  : on_exit_size_move_(main_window->on__exit_size_move.connect(bind_front(&D3DBase::OnExitSizeMove, this))) {
   IDXGIFactory* factory = nullptr;
   HRESULT result = CreateDXGIFactory(__uuidof(IDXGIFactory), (void**)&factory);
   assert(result == S_OK);
@@ -91,13 +91,14 @@ D3DBase::D3DBase(std::shared_ptr<MainWindow> main_window)
   swap_chain_description.SampleDesc.Quality = four_msaa_quality_level - 1;
   swap_chain_description.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
   swap_chain_description.BufferCount = 1;
-  swap_chain_description.OutputWindow = window_->Handle();
+  swap_chain_description.OutputWindow = main_window->Handle();
   swap_chain_description.Windowed = TRUE;
   swap_chain_description.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
   swap_chain_description.Flags = 0;
   result = factory_->CreateSwapChain(device_, &swap_chain_description, &swap_chain_);
   assert(result == S_OK);
-  swap_chain_->GetDesc(&swap_chain_description);
+  result = swap_chain_->GetDesc(&swap_chain_description);
+  assert(result == S_OK);
   DEBUG_LOG(
     u8" CreatedSwapChain.BufferDesc.Width " << swap_chain_description.BufferDesc.Width
     << u8" CreatedSwapChain.BufferDesc.Height " << swap_chain_description.BufferDesc.Height
@@ -106,4 +107,46 @@ D3DBase::D3DBase(std::shared_ptr<MainWindow> main_window)
     << u8" CreatedSwapChain.BufferDesc.ScanlineOrdering " << swap_chain_description.BufferDesc.ScanlineOrdering
     << u8" CreatedSwapChain.BufferDesc.Scaling " << swap_chain_description.BufferDesc.Scaling
   );
+  CComPtr<ID3D11Texture2D> back_buffer;
+  result = swap_chain_->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&back_buffer));
+  assert(result == S_OK);
+  result = device_->CreateRenderTargetView(back_buffer, NULL, &render_target_view_);
+  assert(result == S_OK);
+  D3D11_TEXTURE2D_DESC texture_description;
+  RECT client_rect;
+  BOOL success = main_window->ClientRectangle(&client_rect);
+  assert(success);
+
+  /*
+  typedef struct D3D11_TEXTURE2D_DESC
+  {
+    UINT Width;
+    UINT Height;
+    UINT MipLevels;
+    UINT ArraySize;
+    DXGI_FORMAT Format;
+    DXGI_SAMPLE_DESC SampleDesc;
+    D3D11_USAGE Usage;
+    UINT BindFlags;
+    UINT CPUAccessFlags;
+    UINT MiscFlags;
+  } 	D3D11_TEXTURE2D_DESC;
+
+
+  texture_description.Width = client_rect.right - client_rect.left;
+  texture_description.Height = client_rect.bottom - client_rect.top;
+  texture_description.MipLevels = 1;
+  texture_description.ArraySize = 1;
+  texture_description.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+  texture_description.SampleDesc
+  device_->CreateTexture2D()
+  */
+}
+
+boost::optional<LRESULT> D3DBase::OnExitSizeMove(HWND handle, UINT msg, WPARAM w_param, LPARAM l_param) {
+  if (swap_chain_) {
+    HRESULT result = swap_chain_->ResizeBuffers(1, 0, 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
+    assert(result == S_OK);
+  }
+  return boost::optional<LRESULT>();
 }

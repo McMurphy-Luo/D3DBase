@@ -11,14 +11,18 @@ class MainWindow;
 
 class D3DBase {
 public:
-  D3DBase(std::shared_ptr<MainWindow> main_window);
+  D3DBase(MainWindow* main_window);
+
+private:
+  boost::optional<LRESULT> OnExitSizeMove(HWND handle, UINT msg, WPARAM w_param, LPARAM l_param);
 
 private:
   CComPtr<IDXGIFactory> factory_;
   CComPtr<ID3D11Device> device_;
   CComPtr<ID3D11DeviceContext> device_context_;
   CComPtr<IDXGISwapChain> swap_chain_;
-  std::shared_ptr<MainWindow> window_;
+  CComPtr<ID3D11RenderTargetView> render_target_view_;
+  boost::signals2::connection on_exit_size_move_;
 };
 
 #endif // D3D_BASE_D3D_BASE_H_

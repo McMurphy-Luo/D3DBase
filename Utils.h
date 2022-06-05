@@ -5,6 +5,13 @@
 #include <sstream>
 #include "Utf8String.h"
 
+template <typename Func, typename Obj>
+auto bind_front(Func f, Obj* obj) {
+  return [=](auto&&... args) {
+    return (obj->*f)(std::forward<decltype(args)>(args)...);
+  };
+}
+
 #ifdef D3D_BASE_DEBUG
 #define DEBUG_LOG(x) \
   do { \

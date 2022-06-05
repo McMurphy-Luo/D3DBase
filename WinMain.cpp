@@ -7,7 +7,7 @@
 
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
-  std::shared_ptr<MainWindow> window(new MainWindow(u8"Main", hInstance));
+  MainWindow* window = new MainWindow(u8"Main", hInstance);
   D3DBase* test = new D3DBase(window);
   window->Show(SW_SHOWNORMAL);
   MSG message;
@@ -22,7 +22,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     DispatchMessage(&message);
   }
   delete test;
-  window.reset();
+  delete window;
 #ifdef _CRTDBG_MAP_ALLOC
   _CrtDumpMemoryLeaks();
 #endif

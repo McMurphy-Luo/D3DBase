@@ -4,8 +4,25 @@
 #include <string>
 #include "Windows.h"
 #include "Utf8String.h"
+#include "boost/signals2.hpp"
 
 static Utf8String::const_pointer kMainWindowClass = u8"MainWindow.D3DBase";
+
+struct MessageSlotCombiner {
+  typedef boost::optional<LRESULT> result_type;
+
+  template<typename InputIterator>
+  result_type operator()(InputIterator first, InputIterator last) {
+    while (first != last) {
+      result_type result = *first;
+      if (result) {
+        return result;
+      }
+      ++first;
+    }
+    return result_type();
+  }
+};
 
 class MainWindow {
 public:
@@ -14,6 +31,7 @@ public:
   BOOL Show(int show_flags);
   HWND Handle() const;
   BOOL ClientRectangle(LPRECT rect_output) const;
+  boost::signals2::signal<boost::optional<LRESULT>(HWND, UINT, WPARAM, LPARAM), MessageSlotCombiner> on__exit_size_move;
 
 private:
   HWND handle_;

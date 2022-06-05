@@ -4,14 +4,21 @@
 
 namespace
 {
-  LRESULT CALLBACK WindowProc(HWND window_handler, UINT msg, WPARAM w_param, LPARAM l_param)
+  boost::optional<LRESULT> HandleMessage(MainWindow* window, HWND handle, UINT msg, WPARAM w_param, LPARAM l_param) {
+    if (msg == WM_EXITSIZEMOVE) {
+      return window->on__exit_size_move(handle, msg, w_param, l_param);
+    }
+    return boost::optional<LRESULT>();
+  }
+
+  LRESULT CALLBACK WindowProc(HWND handle, UINT msg, WPARAM w_param, LPARAM l_param)
   {
     switch (msg) {
     case WM_CREATE:
     {
       CREATESTRUCT* p_create_struct = reinterpret_cast<CREATESTRUCT*>(l_param);
       MainWindow* p_created_wnd = reinterpret_cast<MainWindow*>(p_create_struct->lpCreateParams);
-      SetWindowLongPtrW(window_handler, GWLP_USERDATA, (LONG_PTR)p_created_wnd);
+      SetWindowLongPtrW(handle, GWLP_USERDATA, (LONG_PTR)p_created_wnd);
       return 0;
     }
     case WM_DESTROY:
@@ -20,7 +27,14 @@ namespace
       return 0;
     }
     }
-    return DefWindowProcW(window_handler, msg, w_param, l_param);
+    MainWindow* window = reinterpret_cast<MainWindow*>(GetWindowLongPtrW(handle, GWLP_USERDATA));
+    if (window) {
+      boost::optional<LRESULT> result = HandleMessage(window, handle, msg, w_param, l_param);
+      if (result) {
+        return *result;
+      }
+    }
+    return DefWindowProcW(handle, msg, w_param, l_param);
   }
 
   WNDCLASSEX MainWindowClass(HINSTANCE instance)
