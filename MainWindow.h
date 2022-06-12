@@ -32,6 +32,7 @@ public:
   HWND Handle() const;
   BOOL ClientRectangle(LPRECT rect_output) const;
   boost::signals2::signal<boost::optional<LRESULT>(HWND, UINT, WPARAM, LPARAM), MessageSlotCombiner> on__exit_size_move;
+  boost::signals2::signal<boost::optional<LRESULT>(HWND, UINT, WPARAM, LPARAM), MessageSlotCombiner> on__paint;
 
 private:
   HWND handle_;

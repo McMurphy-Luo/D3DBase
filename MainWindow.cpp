@@ -1,6 +1,7 @@
 #include "Define.h"
 #include "MainWindow.h"
 #include <cassert>
+#include "Utils.h"
 
 namespace
 {
@@ -20,6 +21,11 @@ namespace
       MainWindow* p_created_wnd = reinterpret_cast<MainWindow*>(p_create_struct->lpCreateParams);
       SetWindowLongPtrW(handle, GWLP_USERDATA, (LONG_PTR)p_created_wnd);
       return 0;
+    }
+    case WM_PAINT:
+    {
+      DEBUG_LOG(u8"WindowProc WM_PAINT message received");
+      break;
     }
     case WM_DESTROY:
     {

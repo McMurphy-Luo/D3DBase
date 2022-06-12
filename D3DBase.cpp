@@ -4,6 +4,30 @@
 #include "Utils.h"
 #include "MainWindow.h"
 
+using DirectX::XMMATRIX;
+using DirectX::XMMatrixIdentity;
+using DirectX::XMStoreFloat4x4;
+using DirectX::XMFLOAT3;
+using DirectX::XMFLOAT4;
+
+namespace
+{
+  const XMFLOAT4 kWhite = { 1.0f, 1.0f, 1.0f, 1.0f };
+  const XMFLOAT4 kBlack = { 0.0f, 0.0f, 0.0f, 1.0f };
+  const XMFLOAT4 kRed = { 1.0f, 0.0f, 0.0f, 1.0f };
+  const XMFLOAT4 kGreen = { 0.0f, 1.0f, 0.0f, 1.0f };
+  const XMFLOAT4 kBlue = { 0.0f, 0.0f, 1.0f, 1.0f };
+  const XMFLOAT4 kYellow = { 1.0f, 1.0f, 0.0f, 1.0f };
+  const XMFLOAT4 kCyan = { 0.0f, 1.0f, 1.0f, 1.0f };
+  const XMFLOAT4 kMagenta = { 1.0f, 0.0f, 1.0f, 1.0f };
+
+  struct Vertex
+  {
+    XMFLOAT3 Pos;
+    XMFLOAT4 Color;
+  };
+}
+
 D3DBase::D3DBase(MainWindow* main_window)
   : on_exit_size_move_(main_window->on__exit_size_move.connect(bind_front(&D3DBase::OnExitSizeMove, this))) {
   IDXGIFactory* factory = nullptr;
@@ -112,40 +136,81 @@ D3DBase::D3DBase(MainWindow* main_window)
   assert(result == S_OK);
   result = device_->CreateRenderTargetView(back_buffer, NULL, &render_target_view_);
   assert(result == S_OK);
-  D3D11_TEXTURE2D_DESC texture_description;
   RECT client_rect;
   BOOL success = main_window->ClientRectangle(&client_rect);
   assert(success);
-
-  /*
-  typedef struct D3D11_TEXTURE2D_DESC
-  {
-    UINT Width;
-    UINT Height;
-    UINT MipLevels;
-    UINT ArraySize;
-    DXGI_FORMAT Format;
-    DXGI_SAMPLE_DESC SampleDesc;
-    D3D11_USAGE Usage;
-    UINT BindFlags;
-    UINT CPUAccessFlags;
-    UINT MiscFlags;
-  } 	D3D11_TEXTURE2D_DESC;
-
-
+  D3D11_TEXTURE2D_DESC texture_description;
   texture_description.Width = client_rect.right - client_rect.left;
   texture_description.Height = client_rect.bottom - client_rect.top;
   texture_description.MipLevels = 1;
   texture_description.ArraySize = 1;
   texture_description.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-  texture_description.SampleDesc
-  device_->CreateTexture2D()
-  */
+  texture_description.SampleDesc.Count = 4;
+  texture_description.SampleDesc.Quality = four_msaa_quality_level - 1;
+  texture_description.Usage = D3D11_USAGE_DEFAULT;
+  texture_description.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+  texture_description.CPUAccessFlags = 0;
+  texture_description.MiscFlags = 0;
+  CComPtr<ID3D11Texture2D> depth_stencil_buffer;
+  CComPtr<ID3D11DepthStencilView> depth_stencil_view;
+  result = device_->CreateTexture2D(&texture_description, NULL, &depth_stencil_buffer);
+  assert(result == S_OK);
+  result = device_->CreateDepthStencilView(depth_stencil_buffer, NULL, &depth_stencil_view);
+  assert(result == S_OK);
+  ID3D11RenderTargetView* render_target_view = render_target_view_.Detach();
+  device_context_->OMSetRenderTargets(1, &render_target_view, depth_stencil_view);
+  render_target_view_.Attach(render_target_view);
+  D3D11_VIEWPORT vp;
+  vp.TopLeftX = 0.0f;
+  vp.TopLeftY = 0.0f;
+  vp.Width = static_cast<float>(client_rect.right - client_rect.left);
+  vp.Height = static_cast<float>(client_rect.bottom - client_rect.top);
+  vp.MinDepth = 0.0f;
+  vp.MaxDepth = 1.0f;
+  device_context_->RSSetViewports(1, &vp);
+
+  /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  Vertex vertices[] = {
+    { XMFLOAT3(-1.0f, -1.0f, -1.0f), kWhite },
+    { XMFLOAT3(-1.0f, +1.0f, -1.0f), kBlack },
+    { XMFLOAT3(+1.0f, +1.0f, -1.0f), kRed },
+    { XMFLOAT3(+1.0f, -1.0f, -1.0f), kGreen },
+    { XMFLOAT3(-1.0f, -1.0f, +1.0f), kBlue },
+    { XMFLOAT3(-1.0f, +1.0f, +1.0f), kYellow },
+    { XMFLOAT3(+1.0f, +1.0f, +1.0f), kCyan },
+    { XMFLOAT3(+1.0f, -1.0f, +1.0f), kMagenta }
+  };
+
+  D3D11_BUFFER_DESC vertex_buffer_description;
+  assert(result == S_OK);
+  XMMATRIX I = XMMatrixIdentity();
+  XMStoreFloat4x4(&world_, I);
+  XMStoreFloat4x4(&view_, I);
+  XMStoreFloat4x4(&projection_, I);
+}
+
+void D3DBase::Draw() {
+  const float bkcolor[4]{ 0.0,0.0,1.0,0.0 };
+  device_context_->ClearRenderTargetView(
+    render_target_view_,
+    reinterpret_cast<const float*>(&bkcolor)
+  );
+  device_context_->IASetPrimitiveTopology(
+    D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+  HRESULT result = swap_chain_->Present(0, 0);
+  assert(result == S_OK);
 }
 
 boost::optional<LRESULT> D3DBase::OnExitSizeMove(HWND handle, UINT msg, WPARAM w_param, LPARAM l_param) {
   if (swap_chain_) {
+    render_target_view_.Release();
     HRESULT result = swap_chain_->ResizeBuffers(1, 0, 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
+    CComPtr<ID3D11Texture2D> back_buffer;
+    result = swap_chain_->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&back_buffer));
+    assert(result == S_OK);
+    result = device_->CreateRenderTargetView(back_buffer, NULL, &render_target_view_);
     assert(result == S_OK);
   }
   return boost::optional<LRESULT>();

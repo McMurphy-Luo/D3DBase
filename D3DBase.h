@@ -6,12 +6,14 @@
 #include "d3d11.h"
 #include "atlbase.h"
 #include "MainWindow.h"
+#include "DirectXMath.h"
 
 class MainWindow;
 
 class D3DBase {
 public:
   D3DBase(MainWindow* main_window);
+  void Draw();
 
 private:
   boost::optional<LRESULT> OnExitSizeMove(HWND handle, UINT msg, WPARAM w_param, LPARAM l_param);
@@ -23,6 +25,10 @@ private:
   CComPtr<IDXGISwapChain> swap_chain_;
   CComPtr<ID3D11RenderTargetView> render_target_view_;
   boost::signals2::connection on_exit_size_move_;
+  CComPtr<ID3D11Buffer> vertex_buffer_;
+  DirectX::XMFLOAT4X4 world_;
+  DirectX::XMFLOAT4X4 view_;
+  DirectX::XMFLOAT4X4 projection_;
 };
 
 #endif // D3D_BASE_D3D_BASE_H_

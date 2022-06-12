@@ -10,21 +10,19 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
   MainWindow* window = new MainWindow(u8"Main", hInstance);
   D3DBase* test = new D3DBase(window);
   window->Show(SW_SHOWNORMAL);
-  MSG message;
-  BOOL ret;
-  while ((ret = GetMessage(&message, NULL, 0, 0)) != 0) {
-    if (ret == -1) {
-      DEBUG_LOG(u8"System Error is " << GetLastError());
-      assert(false);
-      break;
+  MSG message{ 0 };
+  while (message.message != WM_QUIT) {
+    if (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE)) {
+      TranslateMessage(&message);
+      DispatchMessageW(&message);
+    } else {
+      test->Draw();
     }
-    TranslateMessage(&message);
-    DispatchMessage(&message);
   }
   delete test;
   delete window;
 #ifdef _CRTDBG_MAP_ALLOC
   _CrtDumpMemoryLeaks();
 #endif
-  return 0;
+  return static_cast<int>(message.wParam);
 }
