@@ -24,8 +24,9 @@ private:
   CComPtr<ID3D11DeviceContext> device_context_;
   CComPtr<IDXGISwapChain> swap_chain_;
   CComPtr<ID3D11RenderTargetView> render_target_view_;
-  boost::signals2::connection on_exit_size_move_;
   CComPtr<ID3D11Buffer> vertex_buffer_;
+  CComPtr<ID3D11Buffer> index_buffer_;
+  boost::signals2::connection on_exit_size_move_;
   DirectX::XMFLOAT4X4 world_;
   DirectX::XMFLOAT4X4 view_;
   DirectX::XMFLOAT4X4 projection_;

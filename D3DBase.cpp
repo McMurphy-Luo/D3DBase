@@ -3,6 +3,7 @@
 #include <cassert>
 #include "Utils.h"
 #include "MainWindow.h"
+#include "d3dcompiler.h"
 
 using DirectX::XMMATRIX;
 using DirectX::XMMatrixIdentity;
@@ -181,13 +182,74 @@ D3DBase::D3DBase(MainWindow* main_window)
     { XMFLOAT3(+1.0f, +1.0f, +1.0f), kCyan },
     { XMFLOAT3(+1.0f, -1.0f, +1.0f), kMagenta }
   };
-
   D3D11_BUFFER_DESC vertex_buffer_description;
+  vertex_buffer_description.ByteWidth = sizeof(Vertex) * ARRAYSIZE(vertices);
+  vertex_buffer_description.Usage = D3D11_USAGE_IMMUTABLE;
+  vertex_buffer_description.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+  vertex_buffer_description.CPUAccessFlags = 0;
+  vertex_buffer_description.MiscFlags = 0;
+  vertex_buffer_description.StructureByteStride = 0;
+  D3D11_SUBRESOURCE_DATA buffer_init_data;
+  buffer_init_data.pSysMem = vertices;
+  buffer_init_data.SysMemPitch = 0;
+  buffer_init_data.SysMemSlicePitch = 0;
+  result = device_->CreateBuffer(&vertex_buffer_description, &buffer_init_data, &vertex_buffer_);
+  assert(result == S_OK);
+  UINT indices[] = {
+    // front face
+    0,1,2,
+    0,2,3,
+    // back face
+    4,6,5,
+    4,7,6,
+    // left face
+    4,5,1,
+    4,1,0,
+    // right face
+    3,2,6,
+    3,6,7,
+    // top face
+    1,5,6,
+    1,6,2,
+    // bottom face
+    4,0,3,
+    4,3,7
+  };
+  D3D11_BUFFER_DESC index_buffer_description;
+  index_buffer_description.ByteWidth = sizeof(UINT) * ARRAYSIZE(indices);
+  index_buffer_description.Usage = D3D11_USAGE_IMMUTABLE;
+  index_buffer_description.BindFlags = D3D11_BIND_INDEX_BUFFER;
+  index_buffer_description.CPUAccessFlags = 0;
+  index_buffer_description.MiscFlags = 0;
+  index_buffer_description.StructureByteStride = 0;
+  buffer_init_data.pSysMem = indices;
+  buffer_init_data.SysMemPitch = 0;
+  buffer_init_data.SysMemSlicePitch = 0;
+  result = device_->CreateBuffer(&index_buffer_description, &buffer_init_data, &index_buffer_);
   assert(result == S_OK);
   XMMATRIX I = XMMatrixIdentity();
   XMStoreFloat4x4(&world_, I);
   XMStoreFloat4x4(&view_, I);
   XMStoreFloat4x4(&projection_, I);
+
+
+  result = D3DCompileFromFile(
+    L"FX/color.fx"
+    , NULL
+    , NULL
+    , NULL
+    , "fx_5_0"
+#ifdef D3D_BASE_DEBUG
+    , D3D10_SHADER_DEBUG | D3D10_SHADER_SKIP_OPTIMIZATION
+#else
+    , 0
+#endif
+    ,
+  );
+
+  D3DX11CreateEffectFromMemory
+
+
 }
 
 void D3DBase::Draw() {
@@ -198,8 +260,15 @@ void D3DBase::Draw() {
   );
   device_context_->IASetPrimitiveTopology(
     D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
+  UINT stride = sizeof(Vertex);
+  UINT offset = 0;
+  ID3D11Buffer* vertex_buffer = vertex_buffer_.Detach();
+  device_context_->IASetVertexBuffers(0,1, &vertex_buffer, &stride, &offset);
+  vertex_buffer_.Attach(vertex_buffer);
   HRESULT result = swap_chain_->Present(0, 0);
+  device_context_->IASetIndexBuffer(index_buffer_, DXGI_FORMAT_R32_UINT, 0);
+
+
   assert(result == S_OK);
 }
 
