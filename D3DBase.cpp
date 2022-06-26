@@ -336,7 +336,20 @@ D3DBase::D3DBase(MainWindow* main_window)
   const_buffer_description.MiscFlags = 0;
   const_buffer_description.StructureByteStride = 0;
   result = device_->CreateBuffer(&const_buffer_description, NULL, &const_buffer_);
+  ID3D11Buffer* const_buffer = const_buffer_.Detach();
+  device_context_->VSSetConstantBuffers(0, 1, &const_buffer);
+  const_buffer_.Attach(const_buffer);
   assert(result == S_OK);
+
+  
+
+  DirectX::XMMATRIX world = DirectX::XMLoadFloat4x4(&world_);
+  DirectX::XMMATRIX view = DirectX::XMLoadFloat4x4(&view_);
+  DirectX::XMMATRIX projection = DirectX::XMLoadFloat4x4(&projection_);
+
+  DirectX::XMVECTOR p = DirectX::XMVectorSet(1.0, 1.0, 1.0, 1.0);
+  DirectX::XMVECTOR p_after = DirectX::XMVector4Transform(p, world * view * projection);
+  int i;
 }
 
 void D3DBase::Draw() {
@@ -360,11 +373,8 @@ void D3DBase::Draw() {
   DirectX::XMMATRIX world = DirectX::XMLoadFloat4x4(&world_);
   DirectX::XMMATRIX view = DirectX::XMLoadFloat4x4(&view_);
   DirectX::XMMATRIX projection = DirectX::XMLoadFloat4x4(&projection_);
-  *(reinterpret_cast<DirectX::XMMATRIX*>(const_buffer_mapped.pData)) = world * view * projection;
+  *(reinterpret_cast<DirectX::XMMATRIX*>(const_buffer_mapped.pData)) = DirectX::XMMatrixTranspose(world * view * projection);
   device_context_->Unmap(const_buffer_, 0);
-  ID3D11Buffer* const_buffer = const_buffer_.Detach();
-  device_context_->VSSetConstantBuffers(0, 1, &const_buffer);
-  const_buffer_.Attach(const_buffer);
   device_context_->DrawIndexed(36, 0, 0);
   result = swap_chain_->Present(0, 0);
   assert(result == S_OK);
