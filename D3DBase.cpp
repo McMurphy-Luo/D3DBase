@@ -27,6 +27,12 @@ namespace
     XMFLOAT3 Pos;
     XMFLOAT4 Color;
   };
+
+  void OutputShaderErrorMessage(ID3DBlob* error_message) {
+    Utf8String shader_err;
+    shader_err.append(reinterpret_cast<char*>(error_message->GetBufferPointer()), error_message->GetBufferSize());
+    OutputDebugStringA(shader_err.c_str());
+  }
 }
 
 D3DBase::D3DBase(MainWindow* main_window)
@@ -153,13 +159,12 @@ D3DBase::D3DBase(MainWindow* main_window)
   texture_description.CPUAccessFlags = 0;
   texture_description.MiscFlags = 0;
   CComPtr<ID3D11Texture2D> depth_stencil_buffer;
-  CComPtr<ID3D11DepthStencilView> depth_stencil_view;
   result = device_->CreateTexture2D(&texture_description, NULL, &depth_stencil_buffer);
   assert(result == S_OK);
-  result = device_->CreateDepthStencilView(depth_stencil_buffer, NULL, &depth_stencil_view);
+  result = device_->CreateDepthStencilView(depth_stencil_buffer, NULL, &depth_stencil_view_);
   assert(result == S_OK);
   ID3D11RenderTargetView* render_target_view = render_target_view_.Detach();
-  device_context_->OMSetRenderTargets(1, &render_target_view, depth_stencil_view);
+  device_context_->OMSetRenderTargets(1, &render_target_view, depth_stencil_view_);
   render_target_view_.Attach(render_target_view);
   D3D11_VIEWPORT vp;
   vp.TopLeftX = 0.0f;
@@ -229,27 +234,109 @@ D3DBase::D3DBase(MainWindow* main_window)
   assert(result == S_OK);
   XMMATRIX I = XMMatrixIdentity();
   XMStoreFloat4x4(&world_, I);
-  XMStoreFloat4x4(&view_, I);
-  XMStoreFloat4x4(&projection_, I);
 
+  float theta = 1.5f * DirectX::XM_PI;
+  float phi = 0.25f * DirectX::XM_PI;
+  float radius = 5.0f;
+  // Convert Spherical to Cartesian coordinates.
+  float x = radius * sinf(phi) * cosf(theta);
+  float z = radius * sinf(phi) * sinf(theta);
+  float y = radius * cosf(phi);
+  // Build the view matrix.
+  DirectX::XMVECTOR pos = DirectX::XMVectorSet(x, y, z, 1.0f);
+  DirectX::XMVECTOR target = DirectX::XMVectorZero();
+  DirectX::XMVECTOR up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+  XMMATRIX V = DirectX::XMMatrixLookAtLH(pos, target, up);
+  XMStoreFloat4x4(&view_, V);
 
+  XMMATRIX P = DirectX::XMMatrixPerspectiveFovLH(0.25f * DirectX::XM_PI,
+    static_cast<float>(client_rect.right - client_rect.left) / static_cast<float>(client_rect.bottom - client_rect.top), 1.0f, 1000.0f);
+  XMStoreFloat4x4(&projection_, P);
+  CComPtr<ID3DBlob> shader_code;
+  CComPtr<ID3DBlob> shader_error_message;
   result = D3DCompileFromFile(
-    L"FX/color.fx"
+    L"Shader/Box.hlsl"
     , NULL
     , NULL
-    , NULL
-    , "fx_5_0"
+    , "main"
+    , "vs_5_0"
 #ifdef D3D_BASE_DEBUG
-    , D3D10_SHADER_DEBUG | D3D10_SHADER_SKIP_OPTIMIZATION
+    , D3D10_SHADER_DEBUG | D3D10_SHADER_SKIP_OPTIMIZATION | D3D10_SHADER_ENABLE_STRICTNESS
 #else
     , 0
 #endif
-    ,
+    , 0
+    , &shader_code
+    , &shader_error_message
   );
-
-  D3DX11CreateEffectFromMemory
-
-
+  if (shader_error_message) {
+    OutputShaderErrorMessage(shader_error_message);
+  }
+  assert(result == S_OK);
+  CComPtr<ID3D11VertexShader> vertex_shader;
+  result = device_->CreateVertexShader(shader_code->GetBufferPointer(), shader_code->GetBufferSize(), NULL, &vertex_shader);
+  assert(result == S_OK);
+  device_context_->VSSetShader(vertex_shader, NULL, 0);
+  D3D11_INPUT_ELEMENT_DESC input_layout_desc[2];
+  input_layout_desc[0].SemanticName = "POSITION";
+  input_layout_desc[0].SemanticIndex = 0;
+  input_layout_desc[0].Format = DXGI_FORMAT_R32G32B32_FLOAT;
+  input_layout_desc[0].InputSlot = 0;
+  input_layout_desc[0].AlignedByteOffset = 0;
+  input_layout_desc[0].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+  input_layout_desc[0].InstanceDataStepRate = 0;
+  input_layout_desc[1].SemanticName = "COLOR";
+  input_layout_desc[1].SemanticIndex = 0;
+  input_layout_desc[1].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+  input_layout_desc[1].InputSlot = 0;
+  input_layout_desc[1].AlignedByteOffset = D3D11_APPEND_ALIGNED_ELEMENT;
+  input_layout_desc[1].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+  input_layout_desc[1].InstanceDataStepRate = 0;
+  CComPtr<ID3D11InputLayout> vs_input_layout;
+  result = device_->CreateInputLayout(
+    input_layout_desc,
+    ARRAYSIZE(input_layout_desc),
+    shader_code->GetBufferPointer(),
+    shader_code->GetBufferSize(),
+    &vs_input_layout
+  );
+  assert(result == S_OK);
+  device_context_->IASetInputLayout(vs_input_layout);
+  shader_code.Release();
+  shader_error_message.Release();
+  result = D3DCompileFromFile(
+    L"Shader/Box.ps"
+    , NULL
+    , NULL
+    , "PS"
+    , "ps_5_0"
+#ifdef D3D_BASE_DEBUG
+    , D3D10_SHADER_DEBUG | D3D10_SHADER_SKIP_OPTIMIZATION | D3D10_SHADER_ENABLE_STRICTNESS
+#else
+    , 0
+#endif
+    , 0
+    , &shader_code
+    , &shader_error_message
+  );
+  if (shader_error_message) {
+    OutputShaderErrorMessage(shader_error_message);
+  }
+  assert(result == S_OK);
+  CComPtr<ID3D11PixelShader> pixel_shader;
+  result = device_->CreatePixelShader(shader_code->GetBufferPointer(), shader_code->GetBufferSize(), 0, &pixel_shader);
+  assert(result == S_OK);
+  device_context_->PSSetShader(pixel_shader, NULL, 0);
+  D3D11_BUFFER_DESC const_buffer_description;
+  UINT size_of_matrix = sizeof(DirectX::XMMATRIX);
+  const_buffer_description.ByteWidth = sizeof(DirectX::XMFLOAT4X4);
+  const_buffer_description.Usage = D3D11_USAGE_DYNAMIC;
+  const_buffer_description.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+  const_buffer_description.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+  const_buffer_description.MiscFlags = 0;
+  const_buffer_description.StructureByteStride = 0;
+  result = device_->CreateBuffer(&const_buffer_description, NULL, &const_buffer_);
+  assert(result == S_OK);
 }
 
 void D3DBase::Draw() {
@@ -258,6 +345,7 @@ void D3DBase::Draw() {
     render_target_view_,
     reinterpret_cast<const float*>(&bkcolor)
   );
+  device_context_->ClearDepthStencilView(depth_stencil_view_, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
   device_context_->IASetPrimitiveTopology(
     D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   UINT stride = sizeof(Vertex);
@@ -265,22 +353,58 @@ void D3DBase::Draw() {
   ID3D11Buffer* vertex_buffer = vertex_buffer_.Detach();
   device_context_->IASetVertexBuffers(0,1, &vertex_buffer, &stride, &offset);
   vertex_buffer_.Attach(vertex_buffer);
-  HRESULT result = swap_chain_->Present(0, 0);
   device_context_->IASetIndexBuffer(index_buffer_, DXGI_FORMAT_R32_UINT, 0);
-
-
+  D3D11_MAPPED_SUBRESOURCE const_buffer_mapped;
+  HRESULT result = device_context_->Map(const_buffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &const_buffer_mapped);
+  assert(result == S_OK);
+  DirectX::XMMATRIX world = DirectX::XMLoadFloat4x4(&world_);
+  DirectX::XMMATRIX view = DirectX::XMLoadFloat4x4(&view_);
+  DirectX::XMMATRIX projection = DirectX::XMLoadFloat4x4(&projection_);
+  *(reinterpret_cast<DirectX::XMMATRIX*>(const_buffer_mapped.pData)) = world * view * projection;
+  device_context_->Unmap(const_buffer_, 0);
+  ID3D11Buffer* const_buffer = const_buffer_.Detach();
+  device_context_->VSSetConstantBuffers(0, 1, &const_buffer);
+  const_buffer_.Attach(const_buffer);
+  device_context_->DrawIndexed(36, 0, 0);
+  result = swap_chain_->Present(0, 0);
   assert(result == S_OK);
 }
 
 boost::optional<LRESULT> D3DBase::OnExitSizeMove(HWND handle, UINT msg, WPARAM w_param, LPARAM l_param) {
   if (swap_chain_) {
     render_target_view_.Release();
+    depth_stencil_view_.Release();
     HRESULT result = swap_chain_->ResizeBuffers(1, 0, 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
     CComPtr<ID3D11Texture2D> back_buffer;
     result = swap_chain_->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&back_buffer));
     assert(result == S_OK);
     result = device_->CreateRenderTargetView(back_buffer, NULL, &render_target_view_);
     assert(result == S_OK);
+    RECT client_rect;
+    BOOL success = GetClientRect(handle, &client_rect);
+    assert(success);
+    CComPtr<ID3D11Texture2D> depth_stencil_buffer;
+    UINT four_msaa_quality_level = 0;
+    result = device_->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM, 4, &four_msaa_quality_level);
+    assert(result == S_OK);
+    D3D11_TEXTURE2D_DESC texture_description;
+    texture_description.Width = client_rect.right - client_rect.left;
+    texture_description.Height = client_rect.bottom - client_rect.top;
+    texture_description.MipLevels = 1;
+    texture_description.ArraySize = 1;
+    texture_description.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    texture_description.SampleDesc.Count = 4;
+    texture_description.SampleDesc.Quality = four_msaa_quality_level - 1;
+    texture_description.Usage = D3D11_USAGE_DEFAULT;
+    texture_description.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+    texture_description.CPUAccessFlags = 0;
+    texture_description.MiscFlags = 0;
+    result = device_->CreateTexture2D(&texture_description, NULL, &depth_stencil_buffer);
+    result = device_->CreateDepthStencilView(depth_stencil_buffer, NULL, &depth_stencil_view_);
+    assert(result == S_OK);
+    ID3D11RenderTargetView* render_target_view = render_target_view_.Detach();
+    device_context_->OMSetRenderTargets(1, &render_target_view, depth_stencil_view_);
+    render_target_view_.Attach(render_target_view);
   }
   return boost::optional<LRESULT>();
 }
