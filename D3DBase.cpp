@@ -10,6 +10,14 @@ using DirectX::XMMatrixIdentity;
 using DirectX::XMStoreFloat4x4;
 using DirectX::XMFLOAT3;
 using DirectX::XMFLOAT4;
+using DirectX::XM_PI;
+using DirectX::XMVECTOR;
+using DirectX::XMVectorSet;
+using DirectX::XMVectorZero;
+using DirectX::XMMatrixLookAtLH;
+using DirectX::XMFLOAT4X4;
+using DirectX::XMMatrixPerspectiveFovLH;
+using boost::optional;
 
 namespace
 {
@@ -235,21 +243,21 @@ D3DBase::D3DBase(MainWindow* main_window)
   XMMATRIX I = XMMatrixIdentity();
   XMStoreFloat4x4(&world_, I);
 
-  float theta = 1.5f * DirectX::XM_PI;
-  float phi = 0.25f * DirectX::XM_PI;
+  float theta = 1.5f * XM_PI;
+  float phi = 0.25f * XM_PI;
   float radius = 5.0f;
   // Convert Spherical to Cartesian coordinates.
   float x = radius * sinf(phi) * cosf(theta);
   float z = radius * sinf(phi) * sinf(theta);
   float y = radius * cosf(phi);
   // Build the view matrix.
-  DirectX::XMVECTOR pos = DirectX::XMVectorSet(x, y, z, 1.0f);
-  DirectX::XMVECTOR target = DirectX::XMVectorZero();
-  DirectX::XMVECTOR up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-  XMMATRIX V = DirectX::XMMatrixLookAtLH(pos, target, up);
+  XMVECTOR pos = XMVectorSet(x, y, z, 1.0f);
+  XMVECTOR target = XMVectorZero();
+  XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+  XMMATRIX V = XMMatrixLookAtLH(pos, target, up);
   XMStoreFloat4x4(&view_, V);
 
-  XMMATRIX P = DirectX::XMMatrixPerspectiveFovLH(0.25f * DirectX::XM_PI,
+  XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f * XM_PI,
     static_cast<float>(client_rect.right - client_rect.left) / static_cast<float>(client_rect.bottom - client_rect.top), 1.0f, 1000.0f);
   XMStoreFloat4x4(&projection_, P);
   CComPtr<ID3DBlob> shader_code;
@@ -328,8 +336,8 @@ D3DBase::D3DBase(MainWindow* main_window)
   assert(result == S_OK);
   device_context_->PSSetShader(pixel_shader, NULL, 0);
   D3D11_BUFFER_DESC const_buffer_description;
-  UINT size_of_matrix = sizeof(DirectX::XMMATRIX);
-  const_buffer_description.ByteWidth = sizeof(DirectX::XMFLOAT4X4);
+  UINT size_of_matrix = sizeof(XMMATRIX);
+  const_buffer_description.ByteWidth = sizeof(XMFLOAT4X4);
   const_buffer_description.Usage = D3D11_USAGE_DYNAMIC;
   const_buffer_description.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
   const_buffer_description.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -343,12 +351,12 @@ D3DBase::D3DBase(MainWindow* main_window)
 
   
 
-  DirectX::XMMATRIX world = DirectX::XMLoadFloat4x4(&world_);
-  DirectX::XMMATRIX view = DirectX::XMLoadFloat4x4(&view_);
-  DirectX::XMMATRIX projection = DirectX::XMLoadFloat4x4(&projection_);
+  XMMATRIX world = XMLoadFloat4x4(&world_);
+  XMMATRIX view = XMLoadFloat4x4(&view_);
+  XMMATRIX projection = XMLoadFloat4x4(&projection_);
 
-  DirectX::XMVECTOR p = DirectX::XMVectorSet(1.0, 1.0, 1.0, 1.0);
-  DirectX::XMVECTOR p_after = DirectX::XMVector4Transform(p, world * view * projection);
+  XMVECTOR p = XMVectorSet(1.0, 1.0, 1.0, 1.0);
+  XMVECTOR p_after = XMVector4Transform(p, world * view * projection);
   int i;
 }
 
@@ -370,17 +378,17 @@ void D3DBase::Draw() {
   D3D11_MAPPED_SUBRESOURCE const_buffer_mapped;
   HRESULT result = device_context_->Map(const_buffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &const_buffer_mapped);
   assert(result == S_OK);
-  DirectX::XMMATRIX world = DirectX::XMLoadFloat4x4(&world_);
-  DirectX::XMMATRIX view = DirectX::XMLoadFloat4x4(&view_);
-  DirectX::XMMATRIX projection = DirectX::XMLoadFloat4x4(&projection_);
-  *(reinterpret_cast<DirectX::XMMATRIX*>(const_buffer_mapped.pData)) = DirectX::XMMatrixTranspose(world * view * projection);
+  XMMATRIX world = XMLoadFloat4x4(&world_);
+  XMMATRIX view = XMLoadFloat4x4(&view_);
+  XMMATRIX projection = XMLoadFloat4x4(&projection_);
+  *(reinterpret_cast<XMMATRIX*>(const_buffer_mapped.pData)) = XMMatrixTranspose(world * view * projection);
   device_context_->Unmap(const_buffer_, 0);
   device_context_->DrawIndexed(36, 0, 0);
   result = swap_chain_->Present(0, 0);
   assert(result == S_OK);
 }
 
-boost::optional<LRESULT> D3DBase::OnExitSizeMove(HWND handle, UINT msg, WPARAM w_param, LPARAM l_param) {
+optional<LRESULT> D3DBase::OnExitSizeMove(HWND handle, UINT msg, WPARAM w_param, LPARAM l_param) {
   if (swap_chain_) {
     render_target_view_.Release();
     depth_stencil_view_.Release();
@@ -416,5 +424,5 @@ boost::optional<LRESULT> D3DBase::OnExitSizeMove(HWND handle, UINT msg, WPARAM w
     device_context_->OMSetRenderTargets(1, &render_target_view, depth_stencil_view_);
     render_target_view_.Attach(render_target_view);
   }
-  return boost::optional<LRESULT>();
+  return optional<LRESULT>();
 }
