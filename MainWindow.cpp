@@ -3,13 +3,23 @@
 #include <cassert>
 #include "Utils.h"
 
+using boost::optional;
+
 namespace
 {
-  boost::optional<LRESULT> HandleMessage(MainWindow* window, HWND handle, UINT msg, WPARAM w_param, LPARAM l_param) {
+  optional<LRESULT> HandleMessage(MainWindow* window, HWND handle, UINT msg, WPARAM w_param, LPARAM l_param) {
     if (msg == WM_EXITSIZEMOVE) {
       return window->on__exit_size_move(handle, msg, w_param, l_param);
+    } else if (msg == WM_MOUSEMOVE) {
+      return window->on__mouse_move(handle, msg, w_param, l_param);
+    } else if (msg == WM_LBUTTONDOWN) {
+      return window->on__lbutton_down(handle, msg, w_param, l_param);
+    } else if (msg == WM_LBUTTONUP) {
+      return window->on__lbutton_up(handle, msg, w_param, l_param);
+    } else if (msg == WM_MOUSEWHEEL) {
+      return window->on__mouse_wheel(handle, msg, w_param, l_param);
     }
-    return boost::optional<LRESULT>();
+    return optional<LRESULT>();
   }
 
   LRESULT CALLBACK WindowProc(HWND handle, UINT msg, WPARAM w_param, LPARAM l_param)
@@ -35,7 +45,7 @@ namespace
     }
     MainWindow* window = reinterpret_cast<MainWindow*>(GetWindowLongPtrW(handle, GWLP_USERDATA));
     if (window) {
-      boost::optional<LRESULT> result = HandleMessage(window, handle, msg, w_param, l_param);
+      optional<LRESULT> result = HandleMessage(window, handle, msg, w_param, l_param);
       if (result) {
         return *result;
       }

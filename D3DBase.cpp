@@ -4,6 +4,7 @@
 #include "Utils.h"
 #include "MainWindow.h"
 #include "d3dcompiler.h"
+#include "windowsx.h"
 
 using DirectX::XMMATRIX;
 using DirectX::XMMatrixIdentity;
@@ -18,6 +19,7 @@ using DirectX::XMMatrixLookAtLH;
 using DirectX::XMFLOAT4X4;
 using DirectX::XMMatrixPerspectiveFovLH;
 using boost::optional;
+using DirectX::XMConvertToRadians;
 
 namespace
 {
@@ -44,7 +46,13 @@ namespace
 }
 
 D3DBase::D3DBase(MainWindow* main_window)
-  : on_exit_size_move_(main_window->on__exit_size_move.connect(bind_front(&D3DBase::OnExitSizeMove, this))) {
+  : main_window_(main_window)
+  , on_exit_size_move_(main_window->on__exit_size_move.connect(bind_front(&D3DBase::OnExitSizeMove, this)))
+  , on_mouse_move_(main_window->on__mouse_move.connect(bind_front(&D3DBase::OnMouseMove, this)))
+  , on_l_button_down_(main_window->on__lbutton_down.connect(bind_front(&D3DBase::OnLButtonDown, this)))
+  , on_l_button_up_(main_window->on__lbutton_up.connect(bind_front(&D3DBase::OnLButtonUp, this)))
+  , on_mouse_wheel_(main_window->on__mouse_wheel.connect(bind_front(&D3DBase::OnMouseWheel, this)))
+{
   IDXGIFactory* factory = nullptr;
   HRESULT result = CreateDXGIFactory(__uuidof(IDXGIFactory), (void**)&factory);
   assert(result == S_OK);
@@ -79,7 +87,7 @@ D3DBase::D3DBase(MainWindow* main_window)
   DXGI_ADAPTER_DESC adapter_description;
   result = adapter->GetDesc(&adapter_description);
   assert(result == S_OK);
-  DEBUG_LOG(u8"Adapter.Descriotion " << WindowsStringToUtf8String(adapter_description.Description));
+  DEBUG_LOG(u8"[D3DBase::D3DBase] Adapter.Descriotion " << WindowsStringToUtf8String(adapter_description.Description));
   CComPtr<IDXGIOutput> output;
   result = adapter->EnumOutputs(0, &output);
   assert(result == S_OK);
@@ -87,7 +95,7 @@ D3DBase::D3DBase(MainWindow* main_window)
   result = output->GetDesc(&output_description);
   assert(result == S_OK);
   DEBUG_LOG(
-    u8"Output.DeviceName " << WindowsStringToUtf8String(output_description.DeviceName)
+    u8"[D3DBase::D3DBase] Output.DeviceName " << WindowsStringToUtf8String(output_description.DeviceName)
     << u8" Output.DesktopCoordinates.left " << output_description.DesktopCoordinates.left
     << u8" Output.DesktopCoordinates.top " << output_description.DesktopCoordinates.top
     << u8" Output.DesktopCoordinates.right " << output_description.DesktopCoordinates.right
@@ -106,7 +114,7 @@ D3DBase::D3DBase(MainWindow* main_window)
   result = output->FindClosestMatchingMode(&null_mode, &closest_matching_mode, device_);
   assert(result == S_OK);
   DEBUG_LOG(
-    u8"ClosestMatchingMode.Width " << closest_matching_mode.Width
+    u8"[D3DBase::D3DBase] ClosestMatchingMode.Width " << closest_matching_mode.Width
     << u8" ClosestMatchingMode.Height " << closest_matching_mode.Height
     << u8" ClosestMatchingMode.RefreshRate.Denominator " << closest_matching_mode.RefreshRate.Denominator
     << u8" ClosestMatchingMode.RefreshRate.Numerator " << closest_matching_mode.RefreshRate.Numerator
@@ -117,7 +125,7 @@ D3DBase::D3DBase(MainWindow* main_window)
   UINT four_msaa_quality_level = 0;
   result = device_->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM, 4, &four_msaa_quality_level);
   assert(result == S_OK);
-  DEBUG_LOG(u8"4xMSAAQualityLevel" << four_msaa_quality_level);
+  DEBUG_LOG(u8"4xMSAAQualityLevel " << four_msaa_quality_level);
   DXGI_SWAP_CHAIN_DESC swap_chain_description;
   swap_chain_description.BufferDesc.Width = 0;
   swap_chain_description.BufferDesc.Height = 0;
@@ -135,11 +143,12 @@ D3DBase::D3DBase(MainWindow* main_window)
   swap_chain_description.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
   swap_chain_description.Flags = 0;
   result = factory_->CreateSwapChain(device_, &swap_chain_description, &swap_chain_);
+  refresh_rate_ = swap_chain_description.BufferDesc.RefreshRate;
   assert(result == S_OK);
   result = swap_chain_->GetDesc(&swap_chain_description);
   assert(result == S_OK);
   DEBUG_LOG(
-    u8" CreatedSwapChain.BufferDesc.Width " << swap_chain_description.BufferDesc.Width
+    u8"[D3DBase::D3DBase] CreatedSwapChain.BufferDesc.Width " << swap_chain_description.BufferDesc.Width
     << u8" CreatedSwapChain.BufferDesc.Height " << swap_chain_description.BufferDesc.Height
     << u8" CreatedSwapChain.BufferDesc.RefreshRate.Denominator " << swap_chain_description.BufferDesc.RefreshRate.Denominator
     << u8" CreatedSwapChain.BufferDesc.RefreshRate.Numerator " << swap_chain_description.BufferDesc.RefreshRate.Numerator
@@ -240,26 +249,7 @@ D3DBase::D3DBase(MainWindow* main_window)
   buffer_init_data.SysMemSlicePitch = 0;
   result = device_->CreateBuffer(&index_buffer_description, &buffer_init_data, &index_buffer_);
   assert(result == S_OK);
-  XMMATRIX I = XMMatrixIdentity();
-  XMStoreFloat4x4(&world_, I);
 
-  float theta = 1.5f * XM_PI;
-  float phi = 0.25f * XM_PI;
-  float radius = 5.0f;
-  // Convert Spherical to Cartesian coordinates.
-  float x = radius * sinf(phi) * cosf(theta);
-  float z = radius * sinf(phi) * sinf(theta);
-  float y = radius * cosf(phi);
-  // Build the view matrix.
-  XMVECTOR pos = XMVectorSet(x, y, z, 1.0f);
-  XMVECTOR target = XMVectorZero();
-  XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-  XMMATRIX V = XMMatrixLookAtLH(pos, target, up);
-  XMStoreFloat4x4(&view_, V);
-
-  XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f * XM_PI,
-    static_cast<float>(client_rect.right - client_rect.left) / static_cast<float>(client_rect.bottom - client_rect.top), 1.0f, 1000.0f);
-  XMStoreFloat4x4(&projection_, P);
   CComPtr<ID3DBlob> shader_code;
   CComPtr<ID3DBlob> shader_error_message;
   result = D3DCompileFromFile(
@@ -348,16 +338,6 @@ D3DBase::D3DBase(MainWindow* main_window)
   device_context_->VSSetConstantBuffers(0, 1, &const_buffer);
   const_buffer_.Attach(const_buffer);
   assert(result == S_OK);
-
-  
-
-  XMMATRIX world = XMLoadFloat4x4(&world_);
-  XMMATRIX view = XMLoadFloat4x4(&view_);
-  XMMATRIX projection = XMLoadFloat4x4(&projection_);
-
-  XMVECTOR p = XMVectorSet(1.0, 1.0, 1.0, 1.0);
-  XMVECTOR p_after = XMVector4Transform(p, world * view * projection);
-  int i;
 }
 
 void D3DBase::Draw() {
@@ -378,14 +358,40 @@ void D3DBase::Draw() {
   D3D11_MAPPED_SUBRESOURCE const_buffer_mapped;
   HRESULT result = device_context_->Map(const_buffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &const_buffer_mapped);
   assert(result == S_OK);
-  XMMATRIX world = XMLoadFloat4x4(&world_);
-  XMMATRIX view = XMLoadFloat4x4(&view_);
-  XMMATRIX projection = XMLoadFloat4x4(&projection_);
-  *(reinterpret_cast<XMMATRIX*>(const_buffer_mapped.pData)) = XMMatrixTranspose(world * view * projection);
+
+  XMFLOAT4X4 world;
+  XMMATRIX I = XMMatrixIdentity();
+  XMStoreFloat4x4(&world, I);
+  XMMATRIX world_matrix = XMLoadFloat4x4(&world);
+  XMFLOAT4X4 view;
+  XMFLOAT4X4 projection;
+  // Convert Spherical to Cartesian coordinates.
+  float x = radius_ * sinf(phi_) * cosf(theta_);
+  float z = radius_ * sinf(phi_) * sinf(theta_);
+  float y = radius_ * cosf(phi_);
+  // Build the view matrix.
+  XMVECTOR pos = XMVectorSet(x, y, z, 1.0f);
+  XMVECTOR target = XMVectorZero();
+  XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+  XMMATRIX V = XMMatrixLookAtLH(pos, target, up);
+  XMStoreFloat4x4(&view, V);
+  RECT client_rect;
+  main_window_->ClientRectangle(&client_rect);
+  XMMATRIX P = XMMatrixPerspectiveFovLH(0.25f * XM_PI,
+    static_cast<float>(client_rect.right - client_rect.left) / static_cast<float>(client_rect.bottom - client_rect.top), 1.0f, 1000.0f);
+  XMStoreFloat4x4(&projection, P);
+  XMMATRIX view_matrix = XMLoadFloat4x4(&view);
+  XMMATRIX projection_matrix = XMLoadFloat4x4(&projection);
+  *(reinterpret_cast<XMMATRIX*>(const_buffer_mapped.pData)) = XMMatrixTranspose(world_matrix * view_matrix * projection_matrix);
+
   device_context_->Unmap(const_buffer_, 0);
   device_context_->DrawIndexed(36, 0, 0);
   result = swap_chain_->Present(0, 0);
   assert(result == S_OK);
+}
+
+DXGI_RATIONAL D3DBase::RefreshRate() {
+  return refresh_rate_;
 }
 
 optional<LRESULT> D3DBase::OnExitSizeMove(HWND handle, UINT msg, WPARAM w_param, LPARAM l_param) {
@@ -423,6 +429,49 @@ optional<LRESULT> D3DBase::OnExitSizeMove(HWND handle, UINT msg, WPARAM w_param,
     ID3D11RenderTargetView* render_target_view = render_target_view_.Detach();
     device_context_->OMSetRenderTargets(1, &render_target_view, depth_stencil_view_);
     render_target_view_.Attach(render_target_view);
+    D3D11_VIEWPORT vp;
+    vp.TopLeftX = 0.0f;
+    vp.TopLeftY = 0.0f;
+    vp.Width = static_cast<float>(client_rect.right - client_rect.left);
+    vp.Height = static_cast<float>(client_rect.bottom - client_rect.top);
+    vp.MinDepth = 0.0f;
+    vp.MaxDepth = 1.0f;
+    device_context_->RSSetViewports(1, &vp);
   }
+  return optional<LRESULT>();
+}
+
+optional<LRESULT> D3DBase::OnMouseMove(HWND handle, UINT msg, WPARAM w_param, LPARAM l_param) {
+  LONG x = GET_X_LPARAM(l_param);
+  LONG y = GET_Y_LPARAM(l_param);
+  if (w_param & MK_LBUTTON) {
+    float dx = XMConvertToRadians(
+      0.25f * static_cast<float>(x - last_mouse_x_));
+    float dy = XMConvertToRadians(
+      0.25f * static_cast<float>(y - last_mouse_y_));
+    theta_ += dx;
+    phi_ += dy;
+  }
+  last_mouse_x_ = x;
+  last_mouse_y_ = y;
+  return optional<LRESULT>();
+}
+
+optional<LRESULT> D3DBase::OnLButtonDown(HWND handle, UINT msg, WPARAM w_param, LPARAM l_param) {
+  SetCapture(main_window_->Handle());
+  last_mouse_x_ = GET_X_LPARAM(l_param);
+  last_mouse_y_ = GET_Y_LPARAM(l_param);
+  return optional<LRESULT>();
+}
+
+optional<LRESULT> D3DBase::OnLButtonUp(HWND handle, UINT msg, WPARAM w_param, LPARAM l_param) {
+  ReleaseCapture();
+  return optional<LRESULT>();
+}
+
+optional<LRESULT> D3DBase::OnMouseWheel(HWND handle, UINT msg, WPARAM w_param, LPARAM l_param) {
+  radius_ -= GET_WHEEL_DELTA_WPARAM(w_param) / WHEEL_DELTA;
+  radius_ = max(radius_, 1);
+  radius_ = min(radius_, 10);
   return optional<LRESULT>();
 }
